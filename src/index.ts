@@ -1,71 +1,57 @@
-import { McpAgent } from "agents/mcp";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
+import { McpAgent } from 'agents/mcp';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { initializeTools } from './tools';
+import { Album } from './types';
 
-// Define our MCP agent with tools
-export class MyMCP extends McpAgent {
-	server = new McpServer({
-		name: "Authless Calculator",
-		version: "1.0.0",
-	});
+export class PitchforkListMCP extends McpAgent<Env> {
+  albumList: Array<Album> = [];
 
-	async init() {
-		// Simple addition tool
-		this.server.tool("add", { a: z.number(), b: z.number() }, async ({ a, b }) => ({
-			content: [{ type: "text", text: String(a + b) }],
-		}));
+  server = new McpServer(
+    {
+      name: 'pitchfork-2000s-list',
+      version: '1.0.0',
+    },
+    {
+      capabilities: {
+        tools: {
+          listChanged: true,
+        },
+      },
+      instructions: `
+      Provides access to Pitchfork's "200 Best Albums of the 2000s" ranked list. Search, filter, and explore albums by artist, title, year (2000-2009), rank position, or genre. All 200 albums include rank, artist, title, release year, and genre tags.
+      `.trim(),
+    }
+  );
 
-		// Calculator tool with multiple operations
-		this.server.tool(
-			"calculate",
-			{
-				operation: z.enum(["add", "subtract", "multiply", "divide"]),
-				a: z.number(),
-				b: z.number(),
-			},
-			async ({ operation, a, b }) => {
-				let result: number;
-				switch (operation) {
-					case "add":
-						result = a + b;
-						break;
-					case "subtract":
-						result = a - b;
-						break;
-					case "multiply":
-						result = a * b;
-						break;
-					case "divide":
-						if (b === 0)
-							return {
-								content: [
-									{
-										type: "text",
-										text: "Error: Cannot divide by zero",
-									},
-								],
-							};
-						result = a / b;
-						break;
-				}
-				return { content: [{ type: "text", text: String(result) }] };
-			},
-		);
-	}
+  async init() {
+    try {
+      const albums = await this.env.KV.get<Array<Album>>('albums', 'json');
+
+      if (!albums) {
+        throw new Error('Albums data not found in KV namespace');
+      }
+
+      this.albumList = albums;
+      await initializeTools(this);
+    } catch (error) {
+      console.error('Failed to load albums from KV:', error);
+      throw error;
+    }
+  }
 }
 
 export default {
-	fetch(request: Request, env: Env, ctx: ExecutionContext) {
-		const url = new URL(request.url);
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const url = new URL(request.url);
 
-		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
-			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
-		}
+    if (url.pathname === '/sse' || url.pathname === '/sse/message') {
+      return PitchforkListMCP.serveSSE('/sse').fetch(request, env, ctx);
+    }
 
-		if (url.pathname === "/mcp") {
-			return MyMCP.serve("/mcp").fetch(request, env, ctx);
-		}
+    if (url.pathname === '/mcp') {
+      return PitchforkListMCP.serve('/mcp').fetch(request, env, ctx);
+    }
 
-		return new Response("Not found", { status: 404 });
-	},
+    return new Response('Not found', { status: 404 });
+  },
 };
