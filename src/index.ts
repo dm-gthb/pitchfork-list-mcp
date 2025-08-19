@@ -1,25 +1,24 @@
 import { McpAgent } from 'agents/mcp';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { initializeTools } from './tools';
 import { Album } from './types';
+import { initializeTools } from './tools';
+import { initializePrompts } from './prompts';
+import { initializeResources } from './resources';
 
 export class PitchforkListMCP extends McpAgent<Env> {
   albumList: Array<Album> = [];
-
   server = new McpServer(
     {
-      name: 'pitchfork-2000s-list',
+      name: 'pitchfork-list',
       version: '1.0.0',
     },
     {
       capabilities: {
-        tools: {
-          listChanged: true,
-        },
+        tools: { listChanged: true },
+        prompts: { listChanged: true },
+        resources: { listChanged: true },
       },
-      instructions: `
-      Provides access to Pitchfork's "200 Best Albums of the 2000s" ranked list. Search, filter, and explore albums by artist, title, year (2000-2009), rank position, or genre. All 200 albums include rank, artist, title, release year, and genre tags.
-      `.trim(),
+      instructions: `Provides access to Pitchfork's "200 Best Albums of the 2000s" ranked list. Search, filter, and explore albums by artist, title, year (2000-2009), rank position, or genre. All albums include rank, artist, title, release year, and genre tags.`,
     }
   );
 
@@ -31,8 +30,10 @@ export class PitchforkListMCP extends McpAgent<Env> {
         throw new Error('Albums data not found in KV namespace');
       }
 
-      this.albumList = albums;
+      this.albumList = albums.sort((a, b) => a.rank - b.rank);
       await initializeTools(this);
+      await initializePrompts(this);
+      await initializeResources(this);
     } catch (error) {
       console.error('Failed to load albums from KV:', error);
       throw error;

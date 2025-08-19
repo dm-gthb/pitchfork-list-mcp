@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { type PitchforkListMCP } from './index';
+import {
+  extractUniqueGenres,
+  filterAlbumsByYear,
+  computeAlbumCountsByYear,
+  computeAlbumCountsByGenre,
+  computeAlbumCountsByArtist,
+} from './utils';
 
 export async function initializeTools(agent: PitchforkListMCP) {
   agent.server.registerTool(
@@ -23,13 +30,8 @@ export async function initializeTools(agent: PitchforkListMCP) {
       description: 'Returns all unique genres sorted alphabetically.',
     },
     async () => {
-      const uniqueGenres = [
-        ...new Set(agent.albumList.map((album) => album.genres).flat()),
-      ].sort((a, b) => a.localeCompare(b));
-
-      return {
-        content: [createText(uniqueGenres)],
-      };
+      const uniqueGenres = extractUniqueGenres(agent.albumList);
+      return { content: [createText(uniqueGenres)] };
     }
   );
 
@@ -105,9 +107,9 @@ export async function initializeTools(agent: PitchforkListMCP) {
       },
     },
     async ({ year }) => {
-      const results = agent.albumList
-        .filter((album) => album.year === year)
-        .sort((a, b) => a.rank - b.rank);
+      const results = filterAlbumsByYear(agent.albumList, year, {
+        sortByRank: true,
+      });
 
       if (results.length === 0) {
         return {
@@ -201,14 +203,7 @@ export async function initializeTools(agent: PitchforkListMCP) {
       },
     },
     async ({ sortBy = 'count' }) => {
-      const yearCounts: Record<string, number> = {};
-
-      agent.albumList.forEach((album) => {
-        const year = album.year || 'unknown';
-        yearCounts[year] = (yearCounts[year] || 0) + 1;
-      });
-
-      const entries = Object.entries(yearCounts);
+      const entries = Object.entries(computeAlbumCountsByYear(agent.albumList));
 
       if (sortBy === 'year') {
         entries.sort(([a], [b]) => a.localeCompare(b));
@@ -253,17 +248,9 @@ export async function initializeTools(agent: PitchforkListMCP) {
       },
     },
     async ({ sortBy = 'count', minCount = 1 }) => {
-      const genreCounts: Record<string, number> = {};
-
-      agent.albumList.forEach((album) => {
-        album.genres.forEach((genre) => {
-          genreCounts[genre] = (genreCounts[genre] || 0) + 1;
-        });
-      });
-
-      let entries = Object.entries(genreCounts).filter(
-        ([, count]) => count >= minCount
-      );
+      let entries = Object.entries(
+        computeAlbumCountsByGenre(agent.albumList)
+      ).filter(([, count]) => count >= minCount);
 
       if (sortBy === 'genre') {
         entries.sort(([a], [b]) => a.localeCompare(b));
@@ -314,12 +301,7 @@ export async function initializeTools(agent: PitchforkListMCP) {
       },
     },
     async ({ sortBy = 'count', minAlbums = 1, showSummary = true }) => {
-      const artistCounts: Record<string, number> = {};
-
-      agent.albumList.forEach((album) => {
-        artistCounts[album.artist] = (artistCounts[album.artist] || 0) + 1;
-      });
-
+      const artistCounts = computeAlbumCountsByArtist(agent.albumList);
       let entries = Object.entries(artistCounts).filter(
         ([, count]) => count >= minAlbums
       );
