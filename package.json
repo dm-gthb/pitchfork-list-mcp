@@ -1,7 +1,8 @@
 {
-	"name": "remote-mcp-server-authless",
+	"name": "pitchfork-list-mcp-server",
 	"version": "0.0.0",
 	"private": true,
+	"author": "Dmitrii Mamonov",
 	"scripts": {
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
